@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+
+var optimist = require('optimist');
+var fs = require('fs');
+var request = require('request');
+var exec = require('child_process').exec;
+var {URL, URLSearchParams} = require('url');
+var csv = require('csv');
+
+var alignList = [
+  'center',
+  'left',
+  'right',
+];
+var fontList = [
+  'notosans-mono-bold',
+  'mplus-1p-black',
+  'rounded-x-mplus-1p-black',
+  'ipamjm',
+  'LinLibertine_RBah',
+  'aoyagireisyoshimo',
+];
+
+
+var argv = optimist
+
+    .usage([
+      'Usage:',
+      '$0 -f emoji.csv',
+      '$0 -f emoji.csv -c ff0000ff',
+      '$0 -f emoji.csv --proxy http://localhost:8080/',
+    ].join('\n'))
+
+    .demand('f')
+    .string('f')
+    .alias('f', 'file')
+    .default('f', undefined)
+
+    .string('c')
+    .alias('c', 'color')
+    .alias('c', 'fore_color')
+    .alias('c', 'foreground_color')
+    .default('c', '000000FF')
+
+    .string('b')
+    .alias('b', 'back_color')
+    .alias('b', 'background_color')
+    .default('b', '00000000')
+
+    .string('a')
+    .alias('a', 'align')
+    .default('a', alignList[0])
+
+    .string('font')
+    .default('font', fontList[0])
+
+    .boolean('s')
+    .alias('s', 'stretch')
+    .default('s', false)
+
+    .boolean('size_fixed')
+    .default('size_fixed', true)
+
+    .boolean('public_fg')
+    .default('public_fg', false)
+
+    .string('proxy')
+    .default('proxy', undefined)
+
+    .boolean('h')
+    .alias('h', 'help')
+    .default('h', false)
+
+    ;
+
+var args = argv.argv;
+
+if (args.help) {
+  argv.showHelp();
+  return;
+}
+
+/*
+var file = args.file;
+var align = args.align;
+var font = args.font;
+var color = args.color.toUpperCase();
+var back_color = args.back_color.toUpperCase();
+var public_fg = args.public_fg;
+var size_fixed = args.size_fixed;
+var stretch = args.stretch;
+var proxy = args.proxy;
+*/
+
+var {file, align, font, color, back_color, public_fg, size_fixed, stretch, proxy} = args;
+color = color.toUpperCase();
+back_color = back_color.toUpperCase();
+
+if (!alignList.includes(align)) {
+  var replace = alignList[0];
+  console.log(`align: You must choose from ${ alignList.join(', ') }.`);
+  console.log(`align: change '${ align }' to '${ replace }'`);
+  align = replace;
+}
+
+if (!fontList.includes(font)) {
+  var replace = fontList[0];
+  console.log(`font: You must choose from ${ fontList.join(', ') }.`);
+  console.log(`font: change '${ font }' to '${ replace }'`);
+  font = replace;
+}
+
+if (!/^[0-9A-F]{8}$/.test(color)) {
+  var replace = '000000FF';
+  console.log(`color: change '${ color }' to '${ replace }'`);
+  color = replace;
+}
+
+if (!/^[0-9A-F]{8}$/.test(back_color)) {
+  var replace = '00000000';
+  console.log(`back_color: change '${ back_color }' to '${ replace }'`);
+  back_color = replace;
+}
+
+var stream = fs.createReadStream(file, {encoding: 'utf-8',});
+var parser = csv.parse();
+stream.pipe(parser);
+
+var data = [];
+parser.on('readable', function() {
+  var line;
+  while(line = parser.read()) {
+    data.push(line);
+  }
+});
+
+parser.on('finish', function() {
+  data.forEach(function(line, index) {
+    setTimeout(function() {
+      var text = line[0];
+      var name = line[1];
+      var stream = fs.createWriteStream(`${ name }.png`);
+      var url = new URL('http://emoji.pine.moe/emoji_download');
+      var params = url.searchParams;
+      params.append('align', align);
+      params.append('back_color', back_color);
+      params.append('color', color);
+      params.append('font', font);
+      params.append('public_fg', public_fg);
+      params.append('size_fixed', size_fixed);
+      params.append('stretch', stretch);
+      params.append('text', text);
+      console.log(`request: ${ text.replace(/[\r\n]/g, ' ') } => ${ name } : ${ url.href }`);
+      if (proxy) {
+        var proxy = request.defaults({proxy: proxy});
+        proxy(url.href).pipe(stream);
+      } else {
+        request(url.href).pipe(stream);
+      }
+    }, 3000 * index);
+  });
+});
+

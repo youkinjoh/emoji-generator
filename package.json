@@ -1,0 +1,9 @@
+{
+  "name": "emoji-generator",
+  "version": "0.0.1",
+  "dependencies": {
+    "request": "*",
+    "optimist": "*",
+    "csv": "*"
+  }
+}
